@@ -6,6 +6,7 @@ set :sessions, true
 
 BLACKJACK_AMOUNT = 21
 DEALER_HIT_AMOUNT = 17
+INITIAL_POT_AMOUNT = 500
 
 helpers do 
   def calculate_total(cards)
@@ -50,21 +51,23 @@ helpers do
   end
 
   def winner!(msg)
-    @show_hit_or_stay_buttons = false
-    @success = "<strong>#{session[:player_name].capitalize} wins!</strong> #{msg}"
     @play_again = true
+    @show_hit_or_stay_buttons = false
+    session[:player_pot] = session[:player_pot] + session[:player_bet]
+    @winner = "<strong>#{session[:player_name].capitalize} wins!</strong> #{msg}"
   end
 
   def loser!(msg)
-    @show_hit_or_stay_buttons = false
-    @error = "<strong>#{session[:player_name].capitalize} loses!</strong> #{msg}"
     @play_again = true
+    @show_hit_or_stay_buttons = false
+    session[:player_pot] = session[:player_pot] - session[:player_bet]
+    @loser = "<strong>#{session[:player_name].capitalize} loses!</strong> #{msg}"
   end
 
   def tie!(msg)
-    @show_hit_or_stay_buttons = false
-    @success = "<strong>Its a tie!</strong> #{msg}"
     @play_again = true
+    @show_hit_or_stay_buttons = false
+    @winner = "<strong>Its a tie!</strong> #{msg}"
   end
 end
 
@@ -83,15 +86,40 @@ get '/' do
 end
 
 get '/player_new' do
+  session[:player_pot] = INITIAL_POT_AMOUNT
   erb :player_new
 end
 
 post '/player_new' do 
+  if params[:player_name].empty?
+    @error = "Name is required"
+    halt erb(:player_new)
+  end
+
   session[:player_name] = params[:player_name]
-  redirect '/game'
+  redirect '/bet'
+end
+
+get '/bet' do 
+  session[:player_bet] = nil
+  erb :bet
+end
+
+post '/bet' do 
+  if params[:bet_amount].nil? || params[:bet_amount].to_i == 0
+    @error = "Must make a bet."
+    halt erb(:bet)
+  elsif params[:bet_amount].to_i > session[:player_pot]
+    @error = "Bet amount cannot be more than what you have ($#{session[:player_pot]})"
+    halt erb(:bet)
+  else
+    session[:player_bet] = params[:bet_amount].to_i
+    redirect '/game'
+  end
 end
 
 get '/game' do
+  session[:turn] = session[:player_name]
 
   suits = ['H', 'D', 'C', 'S']
   values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
@@ -117,7 +145,7 @@ post '/game/player/hit' do
     loser!("#{session[:player_name].capitalize} busts with #{player_total}")
   end
 
-  erb :game
+  erb :game, layout: false
 end
 
 post '/game/player/stay' do 
@@ -127,6 +155,8 @@ post '/game/player/stay' do
 end
 
 get '/game/dealer' do
+  session[:turn] = "dealer"
+
   @show_hit_or_stay_buttons = false
 
   dealer_total = calculate_total(session[:dealer_cards])
@@ -142,7 +172,7 @@ get '/game/dealer' do
     @show_dealer_hit_button = true
   end
   
-  erb :game
+  erb :game, layout: false
 end
 
 post '/game/dealer/hit' do
@@ -164,7 +194,7 @@ get '/game/compare' do
     tie!("Dealer has #{dealer_total} and #{session[:player_name].capitalize} has #{player_total}")
   end
 
-  erb :game
+  erb :game, layout: false
 end
 
 get '/game_over' do 
